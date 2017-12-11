@@ -2,7 +2,7 @@
     <section class="section">
         <div class="columns">
             <div class="column is-6 is-offset-3">
-                
+
                 {{modelLoadingProgress}}% : Model loading: {{modelLoading}}
                 <div class="field">
                     <label class="label">Message</label>
@@ -11,7 +11,7 @@
                     </div>
                     <span>{{sentimentValue}}</span>
                 </div>
-                
+
                 <pre>
 {{stepwiseOutput}}
                 </pre>
@@ -106,7 +106,7 @@ export default {
             this.inputTextParsed = text.trim().toLowerCase().split(/[\s.,!?]+/gi)
 
             this.input = new Float32Array(MAXLEN)
-            
+
             // by convention, use 2 as OOV word
             // reserve 'index_from' (=3 by default) characters: 0 (padding), 1 (start), 2 (OOV)
             // see https://github.com/fchollet/keras/blob/master/keras/datasets/imdb.py
@@ -114,7 +114,9 @@ export default {
                 const index = this.wordIndex[word]
                 return !index ? OOV_WORD_INDEX : index + INDEX_FROM
             })
-            
+
+            let flattened32Array = this.sequences_to_matrix(indices);
+
             indices = [START_WORD_INDEX].concat(indices)
             indices = indices.slice(-MAXLEN)
             // padding and truncation (both pre sequence)
@@ -122,6 +124,8 @@ export default {
             for (let i = start; i < MAXLEN; i++) {
                 this.input[i] = indices[i - start]
             }
+
+
 
             this.model.predict({ input: this.input }).then(outputData => {
                 this.output = new Float32Array(outputData.output)
@@ -131,6 +135,15 @@ export default {
 
         }, 200),
 
+        sequences_to_matrix(sequences) {
+          var oneHot = new Float32Array(3000);
+          for (i = 0; i < sequences.length; i++){
+            if (sequences[i] < 3000){
+              oneHot[sequences[i]] = 1.0
+            }
+          }
+          return oneHot;
+        },
         stepwiseCalc() {
             const forwardHiddenStates = this.model.modelLayersMap.get('bidirectional_1').forwardLayer.hiddenStateSequence
             const backwardHiddenStates = this.model.modelLayersMap.get('bidirectional_1').backwardLayer.hiddenStateSequence
