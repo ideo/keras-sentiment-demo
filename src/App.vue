@@ -4,17 +4,20 @@
             <div class="column is-6 is-offset-3">
 
                 {{modelLoadingProgress}}% : Model loading: {{modelLoading}}
-                <div class="field">
+                <div class="field" v-if="!modelLoading">
                     <label class="label">Message</label>
                     <div class="control">
                         <textarea class="textarea" placeholder="Enter something here and I will tell you what it means." @input="handleTextInput"></textarea>
                     </div>
-                    <span>{{sentimentValue}}</span>
+                    <span v-html="sentimentValue"></span>
                 </div>
 
-                <pre>
-{{stepwiseOutput}}
-                </pre>
+    <div>
+        <h3>output</h3>
+<pre>
+{{output}}
+</pre>
+    </div>
 
                 <div class="field is-grouped">
                     <div class="control">
@@ -33,14 +36,12 @@ import _ from 'lodash'
 import ndarray from 'ndarray'
 import ops from 'ndarray-ops'
 
-const MODEL_FILEPATH = '/static/data/imdb_bidirectional_lstm/imdb_bidirectional_lstm.bin'
+const MODEL_FILEPATH = '/static/data/twitter_seq_dense_dropout/fullModel.bin'
 const ADDITIONAL_DATA_FILEPATHS = {
-    wordIndex: '/static/data/imdb_bidirectional_lstm/imdb_dataset_word_index_top20000.json',
-    wordDict: '/static/data/imdb_bidirectional_lstm/imdb_dataset_word_dict_top20000.json',
-    testSamples: '/static/data/imdb_bidirectional_lstm/imdb_dataset_test.json'
+    wordIndex: '/static/data/twitter_seq_dense_dropout/dictionary.json',
 }
 
-const MAXLEN = 200
+const MAXLEN = 3000
 const START_WORD_INDEX = 1
 const OOV_WORD_INDEX = 2
 const INDEX_FROM = 3
@@ -50,6 +51,7 @@ export default {
     props: {},
     data() {
         return {
+            labels: ['Negative', 'Positive'],
             modelLoadingProgress: 0,
             modelLoading: false,
             modelInitializing: false,
@@ -57,10 +59,9 @@ export default {
             inputTextParsed: null,
             modelRunning: false,
             wordIndex: {},
-            wordDict: {},
             stepwiseOutput: [],
             input: new Float32Array(MAXLEN),
-            output: new Float32Array(1),
+            output: new Float32Array(2),
         }
     },
     components: {
@@ -80,13 +81,12 @@ export default {
         },
         loadAdditionalData() {
             this.modelLoading = true
-            const reqs = ['wordIndex', 'wordDict'].map(key => {
+            const reqs = ['wordIndex'].map(key => {
                 return axios.get(ADDITIONAL_DATA_FILEPATHS[key])
             })
             axios.all(reqs).then(
-                axios.spread((wordIndex, wordDict) => {
+                axios.spread((wordIndex) => {
                     this.wordIndex = wordIndex.data
-                    this.wordDict = wordDict.data
                     this.modelLoading = false
                 })
             )
@@ -112,24 +112,27 @@ export default {
             // see https://github.com/fchollet/keras/blob/master/keras/datasets/imdb.py
             let indices = this.inputTextParsed.map(word => {
                 const index = this.wordIndex[word]
-                return !index ? OOV_WORD_INDEX : index + INDEX_FROM
+                return index
             })
 
             let flattened32Array = this.sequences_to_matrix(indices);
-
-            indices = [START_WORD_INDEX].concat(indices)
-            indices = indices.slice(-MAXLEN)
+            //indices = [START_WORD_INDEX].concat(indices)
+            //indices = indices.slice(-MAXLEN)
             // padding and truncation (both pre sequence)
-            const start = Math.max(0, MAXLEN - indices.length)
-            for (let i = start; i < MAXLEN; i++) {
-                this.input[i] = indices[i - start]
+            //const start = Math.max(0, MAXLEN - indices.length)
+            // for (let i = start; i < MAXLEN; i++) {
+            //     this.input[i] = indices[i - start]
+            // }
+
+            for (let i = 0; i < flattened32Array.length; i++) {
+                this.input[i] = flattened32Array[i]
             }
 
-
+            console.log(this.input);
 
             this.model.predict({ input: this.input }).then(outputData => {
                 this.output = new Float32Array(outputData.output)
-                this.stepwiseCalc()
+                // this.stepwiseCalc()
                 this.modelRunning = false
             })
 
@@ -137,7 +140,7 @@ export default {
 
         sequences_to_matrix(sequences) {
           var oneHot = new Float32Array(3000);
-          for (i = 0; i < sequences.length; i++){
+          for (var i = 0; i < sequences.length; i++){
             if (sequences[i] < 3000){
               oneHot[sequences[i]] = 1.0
             }
@@ -169,7 +172,9 @@ export default {
     },
     computed: {
         sentimentValue() {
-            return (this.output[0] * 100).toFixed(1) + '%'
+            var p = this.labels[0] + ' ' + (this.output[0] * 100).toFixed(1) + '%' 
+            var n = this.labels[1] + ' ' + (this.output[1] * 100).toFixed(1) + '%' 
+            return p + "<br>" + n
         }
     },
     watch: {
